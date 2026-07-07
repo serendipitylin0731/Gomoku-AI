@@ -33,6 +33,7 @@ SOFTWARE.
 using namespace std;
 using namespace std::chrono;
 
+// 每步思考开始时间 与 4.4 秒时限（grading 硬限 5 秒，留 0.6 秒余量）
 static steady_clock::time_point move_start;
 static const int TIME_LIMIT_MS = 4400;
 
@@ -42,18 +43,23 @@ inline bool out_of_time() {
 
 typedef long long ll;
 
-const int DEPTH = 14;
-const int FIRST_THREE_DEPTH = 10;
+// 搜索深度
+const int DEPTH = 14;              // 中盘最大深度
+const int FIRST_THREE_DEPTH = 10;  // 开局辅助搜索深度
 
+// 每层搜索宽度：根节点稍宽，越深越窄
 const int WIDTH[DEPTH + 1] = {0, 0, 3, 3, 3, 3, 3, 4, 4, 5, 6, 7, 9, 11, 13};
 const int FIRST_THREE_WIDTH[FIRST_THREE_DEPTH + 1] = {0, 0, 3, 3, 4, 5, 5, 7, 9, 11, 13};
 
+// 随机数工具
 namespace rand_int {
     std::mt19937 rnd(std::chrono::system_clock::now().time_since_epoch().count());
     int get(int l, int r) { return rnd() % (r - l + 1ll) + l; }
 }
 using rand_int::get;
 
+// 威胁权重表：WEIGHT[len-1][open_flag]
+// open_flag = 0 表示两端都空；open_flag = 1 表示恰好一端空
 const ll WEIGHT[4][2] = {
     {3, 1},
     {1000, 3},
@@ -61,9 +67,10 @@ const ll WEIGHT[4][2] = {
     {10000000000ll, 1000000}
 };
 
-const int N = 15;
-const int M = 15;
+const int N = 15;  // 棋盘行数
+const int M = 15;  // 棋盘列数
 
+// 坐标，w 表示“到边界距离的乘积”，越靠近中心越大
 struct Coordinate {
     int x, y, w;
 
@@ -81,23 +88,54 @@ struct Coordinate {
     }
 };
 
+// 四个方向：横、竖、主对角、副对角
 const Coordinate dir[4] = {Coordinate(0, 1), Coordinate(1, 0), Coordinate(1, 1), Coordinate(1, -1)};
 
-// ---------------------------------------------------------------------------
-// Zobrist hashing and transposition table
-// ---------------------------------------------------------------------------
-static uint64_t zobrist_board[N][M][2];
-static uint64_t zobrist_side;
+// 某个点在某方向、某颜色上的连续状态
+struct Status {
+    int l, r;            // 向左/右连续同色子数（不含自身）
+    bool lblank, rblank; // 左/右相邻是否为空
+
+    Status() : l(0), r(0), lblank(false), rblank(false) {}
+
+    int len() const { return l + r + 1; }
+    int bl() const { return l + lblank; }
+    int br() const { return r + rblank; }
+
+    ll w() const {
+        if (len() >= 5) return (ll)1e15;  // 已成五
+        if (!lblank && !rblank) return 0;  // 两端被堵死
+        return WEIGHT[len() - 1][lblank ^ rblank];
+    }
+};
+
+// 空点候选，按威胁值 w 降序排列
+struct Blank {
+    Coordinate coor;
+    ll w;
+
+    Blank(Coordinate _coor, ll _w) : coor(_coor), w(_w) {}
+
+    bool operator<(const Blank& b) const {
+        return w == b.w ? b.coor < coor : w > b.w;
+    }
+};
+
+// -----------------------------------------------------------------------------
+// Zobrist 哈希 + 置换表
+// -----------------------------------------------------------------------------
+static uint64_t zobrist_board[N][M][2];  // 每个坐标每种颜色一个随机数
+static uint64_t zobrist_side;            // 行棋方 key
 
 struct TTEntry {
     uint64_t key = 0;
     int depth = -1;
-    int flag = 0; // 0 exact, 1 lower, 2 upper
+    int flag = 0;       // 0 精确分，1 下界，2 上界
     ll score = 0;
-    Coordinate best;
+    Coordinate best;    // 该节点最佳着法
 };
 
-static const int TT_SIZE = 1 << 20;
+static const int TT_SIZE = 1 << 20;      // 约 100 万项，约 32 MB
 static TTEntry tt[TT_SIZE];
 static bool tt_initialized = false;
 static std::mt19937_64 zobrist_rng(0x20250708);
@@ -139,40 +177,15 @@ static inline bool tt_probe(uint64_t key, int depth, ll alpha, ll beta, ll& scor
     return false;
 }
 
-struct Status {
-    int l, r;
-    bool lblank, rblank;
-
-    Status() : l(0), r(0), lblank(false), rblank(false) {}
-
-    int len() const { return l + r + 1; }
-    int bl() const { return l + lblank; }
-    int br() const { return r + rblank; }
-
-    ll w() const {
-        if (len() >= 5) return (ll)1e15;
-        if (!lblank && !rblank) return 0;
-        return WEIGHT[len() - 1][lblank ^ rblank];
-    }
-};
-
-struct Blank {
-    Coordinate coor;
-    ll w;
-
-    Blank(Coordinate _coor, ll _w) : coor(_coor), w(_w) {}
-
-    bool operator<(const Blank& b) const {
-        return w == b.w ? b.coor < coor : w > b.w;
-    }
-};
-
+// -----------------------------------------------------------------------------
+// 棋盘类
+// -----------------------------------------------------------------------------
 class Board {
 private:
     int out_of_board = -1;
-    vector<vector<int> > board;
-    vector<vector<vector<vector<Status> > > > status;
-    set<Blank> blank;
+    vector<vector<int> > board;      // 0=self, 1=opp, 2=empty
+    vector<vector<vector<vector<Status> > > > status;  // status[x][y][方向][颜色]
+    set<Blank> blank;                // 空点候选集
 
     int& a(const Coordinate& coor) {
         if (coor.x < 0 || coor.x >= N || coor.y < 0 || coor.y >= M) return out_of_board;
@@ -183,11 +196,13 @@ private:
         return status[coor.x][coor.y];
     }
 
+    // 计算某点对我方/对方的威胁值
     ll calc(const Coordinate& coor, int color) const {
         const auto& st = status[coor.x][coor.y];
         return st[0][color].w() + st[1][color].w() + st[2][color].w() + st[3][color].w();
     }
 
+    // 重新计算某点在某方向上的 Status，并维护 blank 集合
     void update(const Coordinate& coor, int direction) {
         if (a(coor) == out_of_board) return;
         Coordinate d = dir[direction];
@@ -202,6 +217,7 @@ private:
         if (a(coor) == 2) blank.insert(Blank(coor, max(calc(coor, 0), calc(coor, 1))));
     }
 
+    // 落子或提子，并更新相关 Status
     void modify(const Coordinate& coor, int color) {
         if (a(coor) == out_of_board) return;
         if (a(coor) == 2) blank.erase(Blank(coor, max(calc(coor, 0), calc(coor, 1))));
@@ -226,6 +242,7 @@ public:
                     update(Coordinate(i, j), d);
     }
 
+    // 外部接口：color=2 表示 empty；(-1,-1) 表示 swap（翻转所有棋子颜色）
     void modify(int x, int y, int color) {
         if (x == -1 && y == -1) {
             for (int i = 0; i < N; ++i)
@@ -237,6 +254,7 @@ public:
         }
     }
 
+    // 计算当前局面 Zobrist key
     uint64_t compute_key(int color) const {
         uint64_t key = (color == 0) ? zobrist_side : 0;
         for (int i = 0; i < N; ++i)
@@ -246,6 +264,7 @@ public:
         return key;
     }
 
+    // Negamax + Alpha-Beta 核心搜索
     Blank solve(int color, int k, const int* width, ll low = -(ll)1e18, ll high = (ll)1e18, uint64_t key = 0) {
         if (key == 0) key = compute_key(color);
 
@@ -267,7 +286,7 @@ public:
         for (int i = 0; i < width[k] && i < int(blank.size()); ++i, ++it) {
             Coordinate cur = it->coor;
             ll tmp = calc(cur, color) * (k + 10);
-            if (tmp < (ll)1e16) {
+            if (tmp < (ll)1e16) {  // 非直接成五才继续搜索
                 modify(cur, color);
                 uint64_t new_key = key ^ zobrist_board[cur.x][cur.y][color] ^ zobrist_side;
                 tmp -= solve(color ^ 1, k - 1, width, tmp - high, tmp - low, new_key).w;
@@ -279,18 +298,18 @@ public:
                 choose = cur;
             }
             low = max(low, mx);
-            if (low >= high) break;
+            if (low >= high) break;  // beta 剪枝
         }
 
         int flag;
-        if (mx <= orig_low) flag = 2;
-        else if (mx >= orig_high) flag = 1;
-        else flag = 0;
+        if (mx <= orig_low) flag = 2;       // 上界
+        else if (mx >= orig_high) flag = 1; // 下界
+        else flag = 0;                      // 精确
         tt_store(key, k, mx, flag, choose);
         return Blank(choose, mx);
     }
 
-    // Return top-K empty cells sorted by max threat potential.
+    // 返回威胁最大的前 K 个空点
     vector<Coordinate> top_empty(int K) const {
         vector<pair<ll, Coordinate>> v;
         for (int i = 0; i < N; ++i)
@@ -303,15 +322,16 @@ public:
         return ret;
     }
 
+    // 中盘着法：迭代加深
     Coordinate turn() {
         Coordinate best = solve(0, 2, WIDTH).coor;
         for (int d = 4; d <= DEPTH && !out_of_time(); d += 2) {
-            Blank r = solve(0, d, WIDTH);
-            best = r.coor;
+            best = solve(0, d, WIDTH).coor;
         }
         return best;
     }
 
+    // 白棋第一手：选择让局面最“失衡”的点，利于 swap 决策
     Coordinate second() {
         ll mx = -1;
         Coordinate ret;
@@ -329,12 +349,14 @@ public:
         return ret;
     }
 
+    // 白棋第二手：决定是否 swap
     Coordinate is_change() {
         auto res = solve(0, DEPTH, WIDTH);
-        if (res.w > 0) return res.coor;
-        else return Coordinate(-1, -1);
+        if (res.w > 0) return res.coor;  // 不 swap，继续下
+        else return Coordinate(-1, -1);  // swap
     }
 
+    // 黑棋第二手：最小化对手 swap 后的优势
     Coordinate first_two_black() {
         ll mn = (ll)1e18;
         Coordinate ret;
@@ -355,7 +377,7 @@ public:
 
 extern int ai_side;
 std::string ai_name = "FilteredOpening";
-std::vector<std::pair<int, int>> other, mine;
+std::vector<std::pair<int, int>> other, mine;  // 对方 / 己方历史落子
 
 int turnID;
 Board board;
@@ -365,6 +387,7 @@ void init() {
     init_tt();
 }
 
+// 外部接口：返回本步着法
 std::pair<int, int> action(std::pair<int, int> loc) {
     move_start = steady_clock::now();
     board = Board();
@@ -377,6 +400,7 @@ std::pair<int, int> action(std::pair<int, int> loc) {
 
     Coordinate res;
     if (turnID == 0 && ai_side == 0) {
+        // 黑第一手：在中心 3x3 内随机选择，满足 central 7x7 要求并增加非确定性
         static const vector<Coordinate> opens = {
             Coordinate(6, 6), Coordinate(6, 7), Coordinate(6, 8),
             Coordinate(7, 6), Coordinate(7, 7), Coordinate(7, 8),
