@@ -139,9 +139,10 @@ class Judge:
             value = receive(proc).split(' ')
             if len(value) != 2:
                 return None
-            if not value[0].isdigit() or not value[1].isdigit():
+            try:
+                return int(value[0]), int(value[1])
+            except ValueError:
                 return None
-            return int(value[0]), int(value[1])
         def send_action(proc: subprocess.Popen, action: tuple[int, int]) -> None:
             send(proc, f'{action[0]} {action[1]}')
         
