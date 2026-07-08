@@ -1,1 +1,7 @@
 .vscode/
+Miniconda3-latest-Linux-x86_64.sh
+tasks.md
+Minimax/__pycache__/
+Minimax/AIController
+Minimax/baseline
+Minimax/sample

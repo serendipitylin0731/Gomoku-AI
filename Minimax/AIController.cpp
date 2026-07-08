@@ -1,24 +1,3 @@
-
-/*
-MIT License
-Copyright (c) 2019 ouuan
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-
 #include <iostream>
 #include <vector>
 #include <set>
@@ -33,7 +12,7 @@ SOFTWARE.
 using namespace std;
 using namespace std::chrono;
 
-// 每步思考开始时间 与 4.4 秒时限（grading 硬限 5 秒，留 0.6 秒余量）
+// 每步思考开始时间 与 4.4 秒时限（留 0.6 秒余量）
 static steady_clock::time_point move_start;
 static const int TIME_LIMIT_MS = 4400;
 
@@ -51,7 +30,6 @@ const int FIRST_THREE_DEPTH = 10;  // 开局辅助搜索深度
 const int WIDTH[DEPTH + 1] = {0, 0, 3, 3, 3, 3, 3, 4, 4, 5, 6, 7, 9, 11, 13};
 const int FIRST_THREE_WIDTH[FIRST_THREE_DEPTH + 1] = {0, 0, 3, 3, 4, 5, 5, 7, 9, 11, 13};
 
-// 随机数工具
 namespace rand_int {
     std::mt19937 rnd(std::chrono::system_clock::now().time_since_epoch().count());
     int get(int l, int r) { return rnd() % (r - l + 1ll) + l; }
@@ -70,7 +48,7 @@ const ll WEIGHT[4][2] = {
 const int N = 15;  // 棋盘行数
 const int M = 15;  // 棋盘列数
 
-// 坐标，w 表示“到边界距离的乘积”，越靠近中心越大
+// 坐标，w 表示到边界距离的乘积，越靠近中心越大
 struct Coordinate {
     int x, y, w;
 
@@ -121,9 +99,8 @@ struct Blank {
     }
 };
 
-// -----------------------------------------------------------------------------
+
 // Zobrist 哈希 + 置换表
-// -----------------------------------------------------------------------------
 static uint64_t zobrist_board[N][M][2];  // 每个坐标每种颜色一个随机数
 static uint64_t zobrist_side;            // 行棋方 key
 
@@ -132,10 +109,10 @@ struct TTEntry {
     int depth = -1;
     int flag = 0;       // 0 精确分，1 下界，2 上界
     ll score = 0;
-    Coordinate best;    // 该节点最佳着法
+    Coordinate best;
 };
 
-static const int TT_SIZE = 1 << 20;      // 约 100 万项，约 32 MB
+static const int TT_SIZE = 1 << 20;
 static TTEntry tt[TT_SIZE];
 static bool tt_initialized = false;
 static std::mt19937_64 zobrist_rng(0x20250708);
@@ -177,9 +154,8 @@ static inline bool tt_probe(uint64_t key, int depth, ll alpha, ll beta, ll& scor
     return false;
 }
 
-// -----------------------------------------------------------------------------
+
 // 棋盘类
-// -----------------------------------------------------------------------------
 class Board {
 private:
     int out_of_board = -1;
@@ -302,9 +278,9 @@ public:
         }
 
         int flag;
-        if (mx <= orig_low) flag = 2;       // 上界
-        else if (mx >= orig_high) flag = 1; // 下界
-        else flag = 0;                      // 精确
+        if (mx <= orig_low) flag = 2;
+        else if (mx >= orig_high) flag = 1;
+        else flag = 0;
         tt_store(key, k, mx, flag, choose);
         return Blank(choose, mx);
     }
@@ -352,8 +328,8 @@ public:
     // 白棋第二手：决定是否 swap
     Coordinate is_change() {
         auto res = solve(0, DEPTH, WIDTH);
-        if (res.w > 0) return res.coor;  // 不 swap，继续下
-        else return Coordinate(-1, -1);  // swap
+        if (res.w > 0) return res.coor;
+        else return Coordinate(-1, -1);
     }
 
     // 黑棋第二手：最小化对手 swap 后的优势
