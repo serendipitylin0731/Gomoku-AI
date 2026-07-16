@@ -8,10 +8,13 @@ NOTE: AT LEAST one of your testing agents needs to invite RANDOMNESS.
 import argparse
 import numpy as np
 import subprocess
-import ray
+import os
 
 from typing import Sequence
 from dataclasses import dataclass
+
+os.environ.setdefault('RAY_DEDUP_LOGS', '0')
+import ray
 
 
 class Board:
@@ -172,7 +175,7 @@ class Judge:
 def evaluate(
     agents_path: Sequence[str],
     num_plays: int,
-    which_black_first: int,  
+    which_black_first: int,
 ) -> EvaluationResult:
     assert len(agents_path) == 2
     assert num_plays > 0
@@ -194,6 +197,16 @@ def evaluate(
     return EvaluationResult(num_plays, wins, agents_path)
 
 
+@ray.remote
+def play_one_game(agents_path: Sequence[str], which_black: int, game_no: int):
+    play_result = Judge(agents_path[which_black], agents_path[1 - which_black])()
+    if play_result == 1:
+        winner = which_black
+    elif play_result == -1:
+        winner = 1 - which_black
+    else:
+        winner = -1
+    return game_no, winner
 
 
 def main(
@@ -206,13 +219,35 @@ def main(
     assert num_workers > 0
 
     ray.init(num_cpus=num_workers)
-    num_plays_for_worker = [num_plays // num_workers + (1 if i < num_plays % num_workers else 0) for i in range(num_workers)]
-    which_black_first = [sum(num_plays_for_worker[:i]) % 2 for i in range(num_workers)]
-    results = ray.get([
-        ray.remote(evaluate).remote(agents_path, num_plays_for_worker[i], which_black_first[i])
-        for i in range(num_workers)
-    ])
-    final_result: EvaluationResult = sum(results, EvaluationResult(0, [0, 0], agents_path))
+
+    futures = []
+    for i in range(num_plays):
+        which_black = i % 2
+        futures.append(play_one_game.remote(agents_path, which_black, i + 1))
+
+    wins = [0, 0]
+    pending = futures[:]
+    results_by_game: dict[int, int] = {}
+    next_to_print = 1
+
+    while pending:
+        ready, pending = ray.wait(pending, num_returns=1)
+        game_no, winner = ray.get(ready[0])
+        results_by_game[game_no] = winner
+        while next_to_print in results_by_game:
+            w = results_by_game.pop(next_to_print)
+            if w == 0:
+                wins[0] += 1
+                winner_name = agents_path[0]
+            elif w == 1:
+                wins[1] += 1
+                winner_name = agents_path[1]
+            else:
+                winner_name = 'DRAW'
+            print(f'{next_to_print}/{num_plays} {winner_name}')
+            next_to_print += 1
+
+    final_result = EvaluationResult(num_plays, wins, agents_path)
     final_result.summary()
 
 

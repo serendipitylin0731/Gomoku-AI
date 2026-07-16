@@ -5,3 +5,6 @@ Minimax/__pycache__/
 Minimax/AIController
 Minimax/baseline
 Minimax/sample
+__pycache__/
+*/__pycache__/
+tmp/
