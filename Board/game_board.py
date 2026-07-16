@@ -54,6 +54,21 @@ class Board(object):
         self.states_sequence = deque(maxlen=self.feature_planes)
         self.states_sequence.extendleft([[-1, -1]] * self.feature_planes)
 
+    def copy(self):
+        '''返回当前棋盘的一个浅拷贝副本，比 copy.deepcopy 快很多'''
+        new_board = Board(width=self.width,
+                          height=self.height,
+                          n_in_row=self.n_in_row)
+        new_board.players = self.players[:]
+        new_board.feature_planes = self.feature_planes
+        new_board.states = self.states.copy()
+        new_board.current_player = self.current_player
+        new_board.availables = self.availables[:]
+        new_board.last_move = self.last_move
+        new_board.states_sequence = deque(self.states_sequence,
+                                          maxlen=self.feature_planes)
+        return new_board
+
     def move_to_location(self, move):
         '''
         transfer move number to coordinate

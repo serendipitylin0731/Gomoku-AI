@@ -62,10 +62,10 @@ class TrainPipeline():
         # the opponent to evaluate the trained policy
         self.pure_mcts_playout_num = 25
 
-        if (init_model is not None) and os.path.exists(init_model+'.index'):
+        if (init_model is not None) and os.path.exists(init_model):
             # start training from an initial policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,self.board_height,block=self.resnet_block,init_model=init_model,cuda=True)
-        elif (transfer_model is not None) and os.path.exists(transfer_model+'.index'):
+        elif (transfer_model is not None) and os.path.exists(transfer_model):
             # start training from a pre-trained policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,self.board_height,block=self.resnet_block,transfer_model=transfer_model,cuda=True)
         else:

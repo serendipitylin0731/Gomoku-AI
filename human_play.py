@@ -6,6 +6,7 @@ Created on Sat Dec  8 13:51:53 2018
 """
 
 from __future__ import print_function
+import argparse
 from Board.game_board import Board, Game
 from AlphaZero.mcts_pure import MCTSPlayer as MCTS_pure
 from AlphaZero.mcts_alphaZero import MCTSPlayer
@@ -45,58 +46,57 @@ class Human(object):
     def __str__(self):
         return "Human {}".format(self.player)
 
-def run(start_player=0,is_shown=1):
+def run(start_player=0, is_shown=1, width=3, height=3, n_in_row=3,
+        model_file='./model/3_3_3.model', block=1, n_playout=400, cuda=True):
     # run a gomoku game with AI
     # you can set
     # human vs AI or AI vs AI
-    n = 3
-    width, height = 3, 3
-    # model_file = './model_11_11_5/best_policy.model'
-    # model_file = './model_11_11_5/converted_model.pt'
-    model_file = './model/3_3_3.model'
     p = os.getcwd()
-    model_file = path.join(p,model_file)
+    model_file = path.join(p, model_file)
 
-    board = Board(width=width, height=height, n_in_row=n)
+    board = Board(width=width, height=height, n_in_row=n_in_row)
     game = Game(board)
 
-    # mcts_player = MCTS_pure(5,400)
+    best_policy = PolicyValueNet(board_width=width, board_height=height,
+                                 block=block, init_model=model_file, cuda=cuda)
 
-    # best_policy = PolicyValueNet(board_width=width,board_height=height,block=19,init_model=model_file,cuda=False)
-    best_policy = PolicyValueNet(board_width=width, board_height=height, block=1, init_model=model_file, cuda=True)
-
-    # alpha_zero vs alpha_zero
-
-    # best_policy.save_numpy(best_policy.network_all_params)
-    # best_policy.load_numpy(best_policy.network_oppo_all_params)
     alpha_zero_player = MCTSPlayer(policy_value_function=best_policy.policy_value_fn_random,
                                    action_fc=best_policy.action_fc_test,
                                    evaluation_fc=best_policy.evaluation_fc2_test,
                                    c_puct=5,
-                                   n_playout=400,
+                                   n_playout=n_playout,
                                    is_selfplay=False)
-    
-    # minimax_player = MinimaxPlayer(board_width=width, board_height=height, exe_path='./Minimax/betaone.exe')
-
-    # alpha_zero_player_oppo = MCTSPlayer(policy_value_function=best_policy.policy_value_fn_random,
-    #                                     action_fc=best_policy.action_fc_test_oppo,
-    #                                     evaluation_fc=best_policy.evaluation_fc2_test_oppo,
-    #                                     c_puct=5,
-    #                                     n_playout=400,
-    #                                     is_selfplay=False)
-
-    # human player, input your move in the format: 2,3
-    # set start_player=0 for human first
-    # play in termianl without GUI
-
-    # human = Human()
-    # win = game.start_play(human, alpha_zero_player, start_player=start_player, is_shown=is_shown,print_prob=True)
-    # return win
 
     # play in GUI
-    game.start_play_with_UI(alpha_zero_player)
-    # game.start_play_with_UI(minimax_player)
+    game.start_play_with_UI(alpha_zero_player, start_player=start_player)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='与 AlphaZero 人机对战')
+    parser.add_argument('--width', type=int, default=3,
+                        help='棋盘宽度 (默认 3)')
+    parser.add_argument('--height', type=int, default=3,
+                        help='棋盘高度 (默认 3)')
+    parser.add_argument('--n-in-row', type=int, default=3,
+                        help='获胜连子数 (默认 3)')
+    parser.add_argument('--model', type=str, default='./model/3_3_3.model',
+                        help='模型路径')
+    parser.add_argument('--block', type=int, default=1,
+                        help='ResNet 块数 (默认 1)')
+    parser.add_argument('--n-playout', type=int, default=400,
+                        help='MCTS 模拟次数 (默认 400)')
+    parser.add_argument('--start-player', type=int, default=0,
+                        help='先手玩家 0=人类, 1=AI (默认 0)')
+    parser.add_argument('--cuda', action='store_true', default=True,
+                        help='使用 GPU（默认开启）')
+    parser.add_argument('--no-cuda', dest='cuda', action='store_false',
+                        help='禁用 GPU')
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    run(start_player=0,is_shown=True)
+    args = parse_args()
+    run(start_player=args.start_player, is_shown=True,
+        width=args.width, height=args.height, n_in_row=args.n_in_row,
+        model_file=args.model, block=args.block, n_playout=args.n_playout,
+        cuda=args.cuda)
