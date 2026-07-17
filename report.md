@@ -448,14 +448,14 @@ python evaluate_5_5_4.py \
 
 ```mermaid
 flowchart LR
-    A[保存模型到临时文件] --> B[分发任务：各玩5局]
+    A["保存模型到临时文件"] --> B["分发任务：各玩5局"]
 
-    B --> W1[Worker 1<br/>加载模型、下棋]
-    B --> W2[Worker 2<br/>加载模型、下棋]
-    B --> W3[Worker 3<br/>加载模型、下棋]
-    B --> W4[Worker 4<br/>加载模型、下棋]
+    B --> W1["Worker 1<br/>加载模型、下棋"]
+    B --> W2["Worker 2<br/>加载模型、下棋"]
+    B --> W3["Worker 3<br/>加载模型、下棋"]
+    B --> W4["Worker 4<br/>加载模型、下棋"]
 
-    W1 --> C[汇总数据并增强]
+    W1 --> C["汇总数据并增强"]
     W2 --> C
     W3 --> C
     W4 --> C
@@ -507,7 +507,7 @@ flowchart LR
 
 最终选用的模型为 `model/5_5_4_block2_600/best_policy.model`（block=2），使用 4 进程并行自弈、batch size 2048、自弈/评估 playout 400 训练得到，下图为训练曲线。
 
-![](block2_600_result.png)
+![](https://notes.sjtu.edu.cn/uploads/upload_e29609bc81fb8e0212467c6143450c30.png)
 
 使用 `evaluate_5_5_4.py` 对该模型进行评测，AlphaZero 使用 400 playouts，对手为不同 playouts 的纯 MCTS，每个对手各 40 局（交替先后手）：
 
